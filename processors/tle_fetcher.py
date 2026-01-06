@@ -139,8 +139,7 @@ def fetch_from_tle_api(catalog_name, limit):
     """Fetch from TLE API (public CelesTrak mirror)."""
     mapping = CATALOG_MAPPINGS.get(catalog_name, {"search": catalog_name, "page_size": limit})
     search_term = mapping["search"]
-    
-    # Fix: Add trailing slash to URL
+
     url = f"https://tle.ivanstanojevic.me/api/tle/?search={search_term}&page_size={limit}"
     
     response = requests.get(url, timeout=15, allow_redirects=True)
@@ -163,14 +162,12 @@ def fetch_from_celestrak(catalog_name, limit):
     """Fetch from CelesTrak using the new API format."""
     mapping = CATALOG_MAPPINGS.get(catalog_name, {"celestrak_group": "stations"})
     group = mapping.get("celestrak_group", "stations")
-    
-    # Use the new CelesTrak API format
+
     url = f"https://celestrak.org/NORAD/elements/gp.php?GROUP={group}&FORMAT=tle"
     
     response = requests.get(url, timeout=15, allow_redirects=True)
     response.raise_for_status()
-    
-    # Parse TLE format (name on one line, line1 on next, line2 on next)
+
     lines = response.text.strip().split('\n')
     satellites = []
     
@@ -202,7 +199,6 @@ def fetch_tle_data(catalog_name="stations", limit=50):
     """
     global _using_fallback, _last_error, _data_source
     
-    # Try TLE API first
     try:
         satellites = fetch_from_tle_api(catalog_name, limit)
         if satellites:
@@ -215,7 +211,6 @@ def fetch_tle_data(catalog_name="stations", limit=50):
         _last_error = str(e)
         print(f"TLE API unavailable ({catalog_name}): {e}")
     
-    # Try CelesTrak as fallback
     try:
         satellites = fetch_from_celestrak(catalog_name, limit)
         if satellites:
@@ -228,7 +223,6 @@ def fetch_tle_data(catalog_name="stations", limit=50):
         _last_error = str(e)
         print(f"CelesTrak unavailable ({catalog_name}): {e}")
     
-    # Final fallback to cached demo data
     _using_fallback = True
     _data_source = "Cached demo data"
     print(f"Using fallback demo data for {catalog_name}")
