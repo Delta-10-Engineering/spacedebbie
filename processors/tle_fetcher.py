@@ -15,9 +15,9 @@ TLE_SOURCES = [
 ]
 
 CATALOG_MAPPINGS = {
-    "stations": {"search": "ISS", "page_size": 10},
-    "starlink": {"search": "STARLINK", "page_size": 30},
-    "debris": {"search": "DEB", "page_size": 20},
+    "stations": {"search": "ISS", "page_size": 10, "celestrak_group": "stations"},
+    "starlink": {"search": "STARLINK", "page_size": 30, "celestrak_group": "starlink"},
+    "debris": {"search": "DEB", "page_size": 20, "celestrak_group": "last-30-days"},
 }
 
 CATALOGS = {
@@ -140,9 +140,10 @@ def fetch_from_tle_api(catalog_name, limit):
     mapping = CATALOG_MAPPINGS.get(catalog_name, {"search": catalog_name, "page_size": limit})
     search_term = mapping["search"]
     
-    url = f"https://tle.ivanstanojevic.me/api/tle?search={search_term}&page_size={limit}"
+    # Fix: Add trailing slash to URL
+    url = f"https://tle.ivanstanojevic.me/api/tle/?search={search_term}&page_size={limit}"
     
-    response = requests.get(url, timeout=15)
+    response = requests.get(url, timeout=15, allow_redirects=True)
     response.raise_for_status()
     
     data = response.json()
@@ -158,13 +159,50 @@ def fetch_from_tle_api(catalog_name, limit):
     
     return satellites
 
+def fetch_from_celestrak(catalog_name, limit):
+    """Fetch from CelesTrak using the new API format."""
+    mapping = CATALOG_MAPPINGS.get(catalog_name, {"celestrak_group": "stations"})
+    group = mapping.get("celestrak_group", "stations")
+    
+    # Use the new CelesTrak API format
+    url = f"https://celestrak.org/NORAD/elements/gp.php?GROUP={group}&FORMAT=tle"
+    
+    response = requests.get(url, timeout=15, allow_redirects=True)
+    response.raise_for_status()
+    
+    # Parse TLE format (name on one line, line1 on next, line2 on next)
+    lines = response.text.strip().split('\n')
+    satellites = []
+    
+    i = 0
+    while i < len(lines) and len(satellites) < limit:
+        if i + 2 < len(lines):
+            name = lines[i].strip()
+            line1 = lines[i + 1].strip()
+            line2 = lines[i + 2].strip()
+            
+            # Validate TLE format
+            if line1.startswith('1 ') and line2.startswith('2 '):
+                satellites.append({
+                    "name": name,
+                    "line1": line1,
+                    "line2": line2,
+                    "catalog": catalog_name
+                })
+            i += 3
+        else:
+            break
+    
+    return satellites
+
 def fetch_tle_data(catalog_name="stations", limit=50):
     """
     Fetch TLE data from available sources.
-    Tries TLE API first, then falls back to cached data.
+    Tries TLE API first, then CelesTrak, then falls back to cached data.
     """
     global _using_fallback, _last_error, _data_source
     
+    # Try TLE API first
     try:
         satellites = fetch_from_tle_api(catalog_name, limit)
         if satellites:
@@ -177,8 +215,23 @@ def fetch_tle_data(catalog_name="stations", limit=50):
         _last_error = str(e)
         print(f"TLE API unavailable ({catalog_name}): {e}")
     
+    # Try CelesTrak as fallback
+    try:
+        satellites = fetch_from_celestrak(catalog_name, limit)
+        if satellites:
+            _using_fallback = False
+            _last_error = None
+            _data_source = "CelesTrak (live data)"
+            print(f"Successfully fetched {len(satellites)} objects from CelesTrak for {catalog_name}")
+            return satellites
+    except Exception as e:
+        _last_error = str(e)
+        print(f"CelesTrak unavailable ({catalog_name}): {e}")
+    
+    # Final fallback to cached demo data
     _using_fallback = True
     _data_source = "Cached demo data"
+    print(f"Using fallback demo data for {catalog_name}")
     return get_fallback_data(catalog_name, limit)
 
 def get_fallback_data(catalog_name, limit=50):
