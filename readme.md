@@ -36,9 +36,9 @@ A Streamlit web application for real-time tracking of satellites and space debri
 - **debris_density.py**: Models debris density by altitude zone and known collision clusters
 
 ## Object Types
-- 🟢 Space Stations (ISS and manned spacecraft)
-- 🟡 Starlink satellites
-- 🔴 Space debris (Cosmos-2251, Iridium-33 fragments)
+- Space Stations (ISS and manned spacecraft)
+- Starlink satellites
+- Space debris (Cosmos-2251, Iridium-33 fragments)
 
 ## Running the App
 ```
